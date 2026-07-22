@@ -48,6 +48,12 @@
     background:var(--panel-2); color:var(--text); border:1px solid var(--border);
     border-radius:8px; padding:8px 12px; font-family:'Inter',sans-serif; font-size:13px;
   }
+  .toggle-group{display:flex; background:var(--panel-2); border:1px solid var(--border); border-radius:8px; padding:3px; gap:2px;}
+  .toggle-btn{
+    background:transparent; border:none; color:var(--text-dim); font-family:'Inter',sans-serif;
+    font-size:12.5px; font-weight:500; padding:6px 14px; border-radius:6px; cursor:pointer;
+  }
+  .toggle-btn.active{background:var(--amber); color:#2A1D08; font-weight:600;}
   .kpi-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:32px;}
   .kpi-card{
     background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
@@ -74,7 +80,8 @@
   .legend span{display:inline-flex; align-items:center; gap:6px;}
   .dot{width:9px; height:9px; border-radius:2px; display:inline-block;}
 
-  table{width:100%; border-collapse:collapse; font-size:13px;}
+  table{width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed;}
+  .table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
   .block{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:14px;}
   .block-title{background:var(--panel-2); color:var(--amber); font-weight:600; font-size:12.5px; padding:10px 16px; letter-spacing:0.02em;}
   td, th{padding:9px 16px; border-top:1px solid var(--border); text-align:center; vertical-align:middle;}
@@ -85,6 +92,10 @@
 
   .foot-note{color:var(--text-faint); font-size:12px; margin-top:30px; border-top:1px solid var(--border); padding-top:16px;}
 
+  .col-label{width:220px;}
+  .col-data{width:auto;}
+  .col-chg{width:120px;}
+
   .funnel{display:flex; flex-direction:column; gap:2px; padding:8px 0;}
   .funnel-seg{
     display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -93,9 +104,38 @@
   .funnel-seg .fs-label{font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:14px;}
   .funnel-seg .fs-sub{font-size:11px; opacity:.75; margin-top:1px;}
   .funnel-seg .fs-val{font-family:'JetBrains Mono',monospace; font-size:11.5px; margin-top:3px; font-weight:700;}
+
+  .funnel-crosscheck{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    margin-top:2px; padding:12px 20px; background:var(--panel-2); border:1px dashed var(--border-strong,#3A4256);
+    border-radius:var(--radius);
+  }
+  .fc-label{font-weight:600; font-size:13px;}
+  .fc-sub{display:block; font-weight:400; font-size:11px; color:var(--text-faint); margin-top:2px;}
+  .fc-val{font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:700; color:var(--amber); white-space:nowrap;}
+
   @media (max-width:900px){
     .kpi-grid{grid-template-columns:repeat(2,1fr);}
     .chart-grid{grid-template-columns:1fr;}
+  }
+  @media (max-width:640px){
+    body{padding:16px 12px 60px; font-size:13px;}
+    .topbar{flex-direction:column; align-items:flex-start; gap:12px;}
+    .topbar h1{font-size:19px;}
+    .controls{flex-wrap:wrap; width:100%;}
+    .controls select{flex:1 1 auto; min-width:0;}
+    .kpi-grid{grid-template-columns:1fr; gap:10px;}
+    .kpi-value{font-size:21px;}
+    .section-head{flex-direction:column; align-items:flex-start;}
+    .section-head .controls{margin-left:0 !important;}
+    .col-label{width:130px;}
+    .col-chg{width:88px;}
+    td, th{padding:7px 8px; font-size:12px;}
+    .chg{font-size:10.5px; padding:2px 6px; min-width:0;}
+    .funnel-seg{height:74px;}
+    .funnel-seg .fs-label{font-size:12px;}
+    .funnel-seg .fs-sub{font-size:9.5px;}
+    .funnel-seg .fs-val{font-size:10.5px;}
   }
 </style>
 </head>
@@ -107,6 +147,10 @@
     <h1>行銷成效儀表板</h1>
   </div>
   <div class="controls">
+    <div class="toggle-group" id="granularityToggle">
+      <button type="button" class="toggle-btn active" data-mode="week">週報</button>
+      <button type="button" class="toggle-btn" data-mode="month">月報</button>
+    </div>
     <label style="color:var(--text-dim); font-size:12px;">從</label>
     <select id="startWeekSelect"></select>
     <label style="color:var(--text-dim); font-size:12px;">到</label>
@@ -208,43 +252,161 @@ function deltaBadge(curr, prev, metricName){
   return `<span class="chg ${cls}">${sign}${fmt(chg,1)}%</span>`;
 }
 
-// ---------- date range selectors ----------
+// ---------- 資料聚合：把多週資料合併成一筆（週報→月報都靠這套邏輯）----------
+function sumBy(slice, getter){
+  let total = null;
+  slice.forEach(w => { const v = getter(w); if (v !== null && v !== undefined && !isNaN(v)) { total = (total||0) + v; } });
+  return total;
+}
+function weightedAvg(slice, valueGetter, weightGetter){
+  let num = 0, den = 0;
+  slice.forEach(w => {
+    const v = valueGetter(w), wt = weightGetter(w);
+    if (v!=null && !isNaN(v) && wt!=null && !isNaN(wt)) { num += v*wt; den += wt; }
+  });
+  return den ? num/den : null;
+}
+
+function aggregateGA4(slice){
+  const sessions=sumBy(slice,w=>w.ga4?.工作階段數), pv=sumBy(slice,w=>w.ga4?.page_view),
+        vi=sumBy(slice,w=>w.ga4?.view_item), atc=sumBy(slice,w=>w.ga4?.add_to_cart),
+        bc=sumBy(slice,w=>w.ga4?.begin_checkout), pur=sumBy(slice,w=>w.ga4?.purchase),
+        revenue=sumBy(slice,w=>w.ga4?.成交營業額), orders=sumBy(slice,w=>w.ga4?.成交訂單數);
+  const pctOf = n => sessions ? n/sessions*100 : null;
+  return {
+    成交營業額:revenue, 成交訂單數:orders, 成交訂單客單: orders?revenue/orders:null,
+    工作階段數:sessions, page_view:pv, view_item:vi, add_to_cart:atc, begin_checkout:bc, purchase:pur,
+    "有瀏覽產品的工作階段%":pctOf(vi), "有放進購物車的工作階段%":pctOf(atc), "有結帳的工作階段%":pctOf(bc),
+    "發生交易的工作階段%(GA)":pctOf(pur), "真實交易工作階段%":pctOf(orders),
+    購物車交易人次: (atc&&pur)?atc/pur:null,
+  };
+}
+function aggregateAdSegment(slice, keys, getSeg){
+  // keys: 這個分眾原本有的欄位順序（依第一筆有資料的週為準），getSeg(w)=>該週該分眾的物件
+  const spend=sumBy(slice,w=>getSeg(w)?.花費), clicks=sumBy(slice,w=>getSeg(w)?.點擊數),
+        cart=sumBy(slice,w=>getSeg(w)?.購物車次數), conv=sumBy(slice,w=>getSeg(w)?.轉換次數),
+        convVal=sumBy(slice,w=>getSeg(w)?.轉換值), reach=sumBy(slice,w=>getSeg(w)?.觸及數);
+  const out = {};
+  keys.forEach(k => {
+    if (k==='花費') out[k]=spend;
+    else if (k==='點擊數') out[k]=clicks;
+    else if (k==='購物車次數') out[k]=cart;
+    else if (k==='轉換次數') out[k]=conv;
+    else if (k==='轉換值') out[k]=convVal;
+    else if (k==='觸及數') out[k]=reach;
+    else if (k==='CPC'||k==='CPC(連外)') out[k]= clicks?spend/clicks:null;
+    else if (k==='購物車成本') out[k]= cart?spend/cart:null;
+    else if (k==='轉換成本') out[k]= conv?spend/conv:null;
+    else if (k==='客單價') out[k]= conv?convVal/conv:null;
+    else if (k==='ROAS') out[k]= spend?convVal/spend:null;
+    else if (k==='CTR(連外)') out[k]= weightedAvg(slice, w=>getSeg(w)?.[k], w=>getSeg(w)?.點擊數);
+    else if (k==='CPM') out[k]= reach?spend/reach*1000:weightedAvg(slice, w=>getSeg(w)?.CPM, w=>getSeg(w)?.花費);
+    else out[k]= weightedAvg(slice, w=>getSeg(w)?.[k], w=>getSeg(w)?.花費);
+  });
+  return out;
+}
+function firstKeys(slice, getObj){
+  for (const w of slice){ const o = getObj(w); if (o) return Object.keys(o); }
+  return null;
+}
+function aggregatePeriod(slice, periodStart, periodEnd){
+  const ga4 = aggregateGA4(slice);
+  const meta = {};
+  ['整體','新客','知名度_門市','再行銷','海外_港澳'].forEach(seg => {
+    const keys = firstKeys(slice, w=>w.meta?.[seg]);
+    if (keys) meta[seg] = aggregateAdSegment(slice, keys, w=>w.meta?.[seg]);
+  });
+  let google_ads = null, line_ads = null;
+  const gKeys = firstKeys(slice, w=>w.google_ads);
+  if (gKeys) google_ads = aggregateAdSegment(slice, gKeys, w=>w.google_ads);
+  const lKeys = firstKeys(slice, w=>w.line_ads);
+  if (lKeys){
+    // LINE 的轉換成本/客單價/ROAS 是用「轉換花費」而非「總花費」算的，用專屬邏輯處理
+    const totalSpend=sumBy(slice,w=>w.line_ads?.總花費), cpfSpend=sumBy(slice,w=>w.line_ads?.CPF花費),
+          cpfClicks=sumBy(slice,w=>w.line_ads?.CPF點擊數), convSpend=sumBy(slice,w=>w.line_ads?.轉換花費),
+          conv=sumBy(slice,w=>w.line_ads?.轉換次數), convVal=sumBy(slice,w=>w.line_ads?.轉換值);
+    line_ads = {};
+    lKeys.forEach(k => {
+      if (k==='總花費') line_ads[k]=totalSpend;
+      else if (k==='CPF花費') line_ads[k]=cpfSpend;
+      else if (k==='CPF點擊數') line_ads[k]=cpfClicks;
+      else if (k==='CPF成本') line_ads[k]= cpfClicks?cpfSpend/cpfClicks:null;
+      else if (k==='轉換花費') line_ads[k]=convSpend;
+      else if (k==='轉換次數') line_ads[k]=conv;
+      else if (k==='轉換成本') line_ads[k]= conv?convSpend/conv:null;
+      else if (k==='轉換值') line_ads[k]=convVal;
+      else if (k==='客單價') line_ads[k]= conv?convVal/conv:null;
+      else if (k==='ROAS') line_ads[k]= totalSpend?convVal/totalSpend:null;
+      else line_ads[k]= weightedAvg(slice, w=>w.line_ads?.[k], w=>w.line_ads?.總花費);
+    });
+  }
+  const totalSpend = sumBy(slice, w=>w.combined?.總花費);
+  const convValueSum = sumBy(slice, w => (w.combined?.總花費!=null && w.combined?.總ROAS!=null) ? w.combined.總花費*w.combined.總ROAS : null);
+  const combined = {
+    總花費: totalSpend,
+    總ROAS: (totalSpend && convValueSum!=null) ? convValueSum/totalSpend : null,
+    整體CPA: ga4.成交訂單數 ? totalSpend/ga4.成交訂單數 : null,
+    成交訂單客單: ga4.成交訂單客單,
+    GA4整體CPC: weightedAvg(slice, w=>w.combined?.GA4整體CPC, w=>w.combined?.總花費),
+  };
+  return { week_start: periodStart, week_end: periodEnd, ga4, meta, google_ads, line_ads, combined };
+}
+
+let MONTHLY_DATA = null;
+function buildMonthlyData(){
+  const groups = {};
+  const order = [];
+  DATA.forEach(w => {
+    const key = w.week_start.slice(0,7); // YYYY-MM
+    if (!groups[key]) { groups[key] = []; order.push(key); }
+    groups[key].push(w);
+  });
+  return order.map(key => {
+    const slice = groups[key];
+    const start = slice[0].week_start, end = slice[slice.length-1].week_end;
+    return aggregatePeriod(slice, start, end);
+  });
+}
+
+let CURRENT_DATA = DATA;
+let CURRENT_GRANULARITY = 'week';
+
+// ---------- date range selectors（週報/月報共用同一套填充邏輯）----------
 const startWeekSelect = document.getElementById('startWeekSelect');
 const endWeekSelect = document.getElementById('endWeekSelect');
-DATA.forEach((w, i) => {
-  const label = `${w.week_start} ~ ${w.week_end}`;
-  const opt1 = document.createElement('option'); opt1.value = i; opt1.textContent = label;
-  startWeekSelect.appendChild(opt1);
-  const opt2 = document.createElement('option'); opt2.value = i; opt2.textContent = label;
-  endWeekSelect.appendChild(opt2);
-});
-const defaultStart = Math.max(0, DATA.length - 8); // 預設顯示最近 8 週
-startWeekSelect.value = defaultStart;
-endWeekSelect.value = DATA.length - 1;
+const compareWeekA = document.getElementById('compareWeekA');
+const compareWeekB = document.getElementById('compareWeekB');
+
+function periodLabel(w){
+  return CURRENT_GRANULARITY==='month' ? w.week_start.slice(0,7) : `${w.week_start} ~ ${w.week_end}`;
+}
+
+function populateAllSelects(){
+  [startWeekSelect, endWeekSelect, compareWeekA, compareWeekB].forEach(sel => sel.innerHTML = '');
+  CURRENT_DATA.forEach((w, i) => {
+    const label = periodLabel(w);
+    [startWeekSelect, endWeekSelect, compareWeekA, compareWeekB].forEach(sel => {
+      const opt = document.createElement('option'); opt.value = i; opt.textContent = label;
+      sel.appendChild(opt);
+    });
+  });
+  const defaultStart = CURRENT_GRANULARITY==='month' ? 0 : Math.max(0, CURRENT_DATA.length - 8);
+  startWeekSelect.value = defaultStart;
+  endWeekSelect.value = CURRENT_DATA.length - 1;
+  compareWeekA.value = Math.max(0, CURRENT_DATA.length - 2);
+  compareWeekB.value = CURRENT_DATA.length - 1;
+}
+populateAllSelects();
 
 function onRangeChange(){
   let s = parseInt(startWeekSelect.value), e = parseInt(endWeekSelect.value);
-  if (s > e) { // 自動修正順序
-    [s, e] = [e, s];
-  }
+  if (s > e) { [s, e] = [e, s]; }
   renderAll(s, e);
 }
 startWeekSelect.addEventListener('change', onRangeChange);
 endWeekSelect.addEventListener('change', onRangeChange);
 
 // ---------- 兩週比較：獨立的週次選擇（不影響上方 KPI / 趨勢圖 / 漏斗）----------
-const compareWeekA = document.getElementById('compareWeekA');
-const compareWeekB = document.getElementById('compareWeekB');
-DATA.forEach((w, i) => {
-  const label = `${w.week_start} ~ ${w.week_end}`;
-  const optA = document.createElement('option'); optA.value = i; optA.textContent = label;
-  compareWeekA.appendChild(optA);
-  const optB = document.createElement('option'); optB.value = i; optB.textContent = label;
-  compareWeekB.appendChild(optB);
-});
-compareWeekA.value = Math.max(0, DATA.length - 2);
-compareWeekB.value = DATA.length - 1;
-
 function onCompareChange(){
   let a = parseInt(compareWeekA.value), b = parseInt(compareWeekB.value);
   renderComparison(a, b); // a=週次A（起始欄), b=週次B（結束欄), 允許任意先後順序
@@ -266,21 +428,15 @@ function sparkline(canvasId, series, color){
   });
 }
 
-function sumBy(slice, getter){
-  let total = null;
-  slice.forEach(w => { const v = getter(w); if (v !== null && v !== undefined && !isNaN(v)) { total = (total||0) + v; } });
-  return total;
-}
-
 function renderKPIs(startIdx, endIdx){
   const grid = document.getElementById('kpiGrid');
   grid.innerHTML = '';
-  const slice = DATA.slice(startIdx, endIdx+1);
+  const slice = CURRENT_DATA.slice(startIdx, endIdx+1);
   const rangeLen = endIdx - startIdx + 1;
   // 上一個等長區間，用來算「區間變化」
   const prevStart = Math.max(0, startIdx - rangeLen);
   const prevEnd = startIdx - 1;
-  const prevSlice = prevEnd >= prevStart ? DATA.slice(prevStart, prevEnd+1) : [];
+  const prevSlice = prevEnd >= prevStart ? CURRENT_DATA.slice(prevStart, prevEnd+1) : [];
 
   const spendSum = sumBy(slice, w=>w.combined?.總花費);
   const revenueSum = sumBy(slice, w=>w.ga4?.成交營業額);
@@ -328,8 +484,8 @@ let charts = {}; // 保存 Chart 實例，切換區間時需要 destroy 重畫
 function destroyChart(id){ if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
 
 function renderTrendCharts(startIdx, endIdx){
-  const slice = DATA.slice(startIdx, endIdx+1);
-  const weekLabels = slice.map(w => w.week_start.slice(5));
+  const slice = CURRENT_DATA.slice(startIdx, endIdx+1);
+  const weekLabels = slice.map(w => CURRENT_GRANULARITY==='month' ? w.week_start.slice(0,7) : w.week_start.slice(5));
 
   ['spendChart','roasChart','revenueChart','funnelChart'].forEach(destroyChart);
 
@@ -372,7 +528,7 @@ function renderTrendCharts(startIdx, endIdx){
 
 // ---------- GA4 funnel（梯形漏斗，依選取區間加總後重新計算轉換率）----------
 function renderFunnelBar(startIdx, endIdx){
-  const slice = DATA.slice(startIdx, endIdx+1);
+  const slice = CURRENT_DATA.slice(startIdx, endIdx+1);
   const rangeLabel = slice.length > 1
     ? `${slice[0].week_start} ~ ${slice[slice.length-1].week_end}（區間加總後重新計算轉換率）`
     : `${slice[0].week_start} ~ ${slice[0].week_end}`;
@@ -388,22 +544,21 @@ function renderFunnelBar(startIdx, endIdx){
   const realTxnCountSum = sumBy(slice, w=>w.ga4?.成交訂單數);
 
   const pct = (n) => pageViewSum ? n/pageViewSum*100 : null;
+  // 漏斗本身只放「確定會逐層收窄」的 5 個階段（都是同一套 GA4 事件，理論上一定越後面人越少）
   const stages = [
     { label:'頁面瀏覽', sub:'page_view', pct:100 },
     { label:'商品瀏覽率', sub:'（商品瀏覽 ÷ page_view）', pct:pct(viewItemSum) },
     { label:'加車率', sub:'（加入購物車 ÷ page_view）', pct:pct(addToCartSum) },
     { label:'結帳進入率', sub:'（開始結帳 ÷ page_view）', pct:pct(beginCheckoutSum) },
     { label:'購買率（GA）', sub:'（發生交易 ÷ page_view）', pct:pct(purchaseSum) },
-    { label:'真實交易率', sub:'（成交訂單數 ÷ page_view）', pct:pct(realTxnCountSum) },
   ];
+  const realTxnPct = pct(realTxnCountSum);
 
-  const colors = ['#B9D4AE','#A9CBA0','#D9CE8E','#E3B98A','#E3987E','#D97C77'];
+  const colors = ['#B9D4AE','#A9CBA0','#D9CE8E','#E3B98A','#E3987E'];
   const maxWidthPct = 96, minWidthPct = 18;
   // 用開根號縮放：讓小百分比之間的差異也看得出漸縮效果，而不是全部擠在最小寬度
   const widths = stages.map(s => minWidthPct + (maxWidthPct-minWidthPct) * Math.sqrt((s.pct ?? 0)/100));
-  // 漏斗形狀強制單調遞減（視覺寬度不會因為後段數字略高於前段而凸出去，
-  // 例如「真實交易率」有時會因為統計口徑不同而略高於「購買率(GA)」，
-  // 但漏斗本身仍應維持逐層收窄的視覺邏輯，真實百分比數字仍照實顯示）
+  // 漏斗形狀強制單調遞減，避免小數點誤差造成視覺上的凸出
   for (let i = 1; i < widths.length; i++){
     widths[i] = Math.min(widths[i], widths[i-1]);
   }
@@ -419,7 +574,15 @@ function renderFunnelBar(startIdx, endIdx){
     </div>`;
   }).join('');
 
-  document.getElementById('funnelWrap').innerHTML = `<div class="funnel">${rows}</div>`;
+  // 真實交易率跟「購買率(GA)」是兩套不同追蹤系統（後台真實訂單 vs GA事件），
+  // 不一定符合漏斗逐層收窄的邏輯（真實交易有時會比GA記錄的還高，因為GA會漏追蹤），
+  // 所以獨立用一張對照卡片呈現，不硬塞進漏斗形狀裡
+  const realTxnCard = `<div class="funnel-crosscheck">
+    <div class="fc-label">真實交易率<span class="fc-sub">（成交訂單數 ÷ page_view，後台真實訂單數，非GA事件）</span></div>
+    <div class="fc-val">${fmt(realTxnPct,2)}%</div>
+  </div>`;
+
+  document.getElementById('funnelWrap').innerHTML = `<div class="funnel">${rows}</div>${realTxnCard}`;
 }
 function trendOptions(unit, singleAxis){
   return {
@@ -447,17 +610,18 @@ function metricRow(label, currObj, prevObj, key, isMoney){
 }
 
 function block(title, rows, startLabel, endLabel){
-  return `<div class="block"><div class="block-title">${title}</div><table>
+  return `<div class="block"><div class="block-title">${title}</div><div class="table-scroll"><table>
+    <colgroup><col class="col-label"><col class="col-data"><col class="col-data"><col class="col-chg"></colgroup>
     <tr><th>指標</th><th>${startLabel}</th><th>${endLabel}</th><th>區間變化</th></tr>
     ${rows}
-  </table></div>`;
+  </table></div></div>`;
 }
 
 function renderComparison(idxA, idxB){
-  const a = DATA[idxA], b = DATA[idxB]; // a=週次A（第一欄），b=週次B（第二欄），不自動排序，照使用者選的順序顯示
+  const a = CURRENT_DATA[idxA], b = CURRENT_DATA[idxB]; // a=週次A（第一欄），b=週次B（第二欄），不自動排序，照使用者選的順序顯示
   const curr = b, prev = a; // metricRow / deltaBadge 沿用 curr=第二欄, prev=第一欄 的語意
-  const startLabel = a.week_start.slice(5)+'~'+a.week_end.slice(5);
-  const endLabel = b.week_start.slice(5)+'~'+b.week_end.slice(5);
+  const startLabel = CURRENT_GRANULARITY==='month' ? a.week_start.slice(0,7) : (a.week_start.slice(5)+'~'+a.week_end.slice(5));
+  const endLabel = CURRENT_GRANULARITY==='month' ? b.week_start.slice(0,7) : (b.week_start.slice(5)+'~'+b.week_end.slice(5));
   document.getElementById('compareLabel').textContent = (a !== b) ? `週次A ${a.week_start}~${a.week_end}　vs　週次B ${b.week_start}~${b.week_end}` : `${a.week_start}~${a.week_end}`;
 
   let html = '';
@@ -530,8 +694,27 @@ function renderAll(startIdx, endIdx){
   // 兩週比較表改由 compareWeekA / compareWeekB 各自的選單獨立驅動，見 onCompareChange()
 }
 
+// ---------- 週報 / 月報 切換 ----------
+document.querySelectorAll('#granularityToggle .toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const mode = btn.dataset.mode;
+    if (mode === CURRENT_GRANULARITY) return;
+    CURRENT_GRANULARITY = mode;
+    document.querySelectorAll('#granularityToggle .toggle-btn').forEach(b => b.classList.toggle('active', b===btn));
+    if (mode === 'month'){
+      if (!MONTHLY_DATA) MONTHLY_DATA = buildMonthlyData();
+      CURRENT_DATA = MONTHLY_DATA;
+    } else {
+      CURRENT_DATA = DATA;
+    }
+    populateAllSelects();
+    renderAll(parseInt(startWeekSelect.value), parseInt(endWeekSelect.value));
+    renderComparison(parseInt(compareWeekA.value), parseInt(compareWeekB.value));
+  });
+});
+
 // ---------- init ----------
-if (DATA.length === 0){
+if (CURRENT_DATA.length === 0){
   document.body.innerHTML = `<div style="padding:60px; text-align:center; color:var(--text-dim);">
     <h2 style="color:var(--text);">還沒有資料</h2>
     <p>請先執行 <code>python run_weekly_pull.py --backfill 8</code> 產生 dashboard_data.js，再打開這個頁面。</p>
