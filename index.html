@@ -64,7 +64,7 @@
     box-shadow:0 0 0 3px rgba(232,163,61,0.15), 0 4px 16px rgba(232,163,61,0.12);
   }
   .kpi-label{color:var(--text-dim); font-size:12px; margin-bottom:10px;}
-  .kpi-value{font-family:'JetBrains Mono',monospace; font-size:clamp(17px, 2.2vw, 26px); font-weight:700; letter-spacing:-0.01em; word-break:break-word;}
+  .kpi-value{font-family:'JetBrains Mono',monospace; font-size:clamp(17px, 2.2vw, 26px); font-weight:700; letter-spacing:-0.01em; word-break:break-word; font-variant-numeric:slashed-zero;}
   .kpi-delta{display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600; margin-top:8px; padding:2px 8px; border-radius:20px;}
   .delta-good{background:var(--good-dim); color:var(--good);}
   .delta-bad{background:var(--bad-dim); color:var(--bad);}
@@ -87,7 +87,7 @@
   .block{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:14px; padding:16px 16px 4px;}
   .block-title{color:var(--amber); font-weight:600; font-size:13px; letter-spacing:0.02em; padding:0 4px; margin-bottom:2px;}
   .block-sub{color:var(--text-faint); font-size:11px; padding:0 4px; margin-bottom:12px;}
-  .chg{font-family:'JetBrains Mono',monospace; font-weight:600; padding:2px 10px; border-radius:20px; font-size:12px; display:inline-block;}
+  .chg{font-family:'JetBrains Mono',monospace; font-weight:600; padding:2px 10px; border-radius:20px; font-size:12px; display:inline-block; font-variant-numeric:slashed-zero;}
 
   .stat-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:10px; padding-bottom:12px;}
   .stat-card{
@@ -99,7 +99,7 @@
     box-shadow:0 0 0 3px rgba(232,163,61,0.15), 0 4px 16px rgba(232,163,61,0.12);
   }
   .sc-label{color:var(--text-dim); font-size:11.5px; font-weight:500;}
-  .sc-values{font-family:'JetBrains Mono',monospace; font-size:clamp(11px, 1.6vw, 15px); font-weight:700; display:flex; align-items:center; gap:4px 6px; flex-wrap:wrap; justify-content:center; word-break:break-word;}
+  .sc-values{font-family:'JetBrains Mono',monospace; font-size:clamp(11px, 1.6vw, 15px); font-weight:700; display:flex; align-items:center; gap:4px 6px; flex-wrap:wrap; justify-content:center; word-break:break-word; font-variant-numeric:slashed-zero;}
   .sc-arrow{color:var(--text-faint); font-weight:400; font-size:12px;}
   .sc-chg{margin-top:2px;}
 
@@ -158,6 +158,10 @@
     <h1>行銷成效儀表板</h1>
   </div>
   <div class="controls">
+    <div class="toggle-group" id="marketToggle">
+      <button type="button" class="toggle-btn active" data-market="tw">台灣</button>
+      <button type="button" class="toggle-btn" data-market="overseas">馬來西亞/新加坡</button>
+    </div>
     <div class="toggle-group" id="granularityToggle">
       <button type="button" class="toggle-btn active" data-mode="week">週報</button>
       <button type="button" class="toggle-btn" data-mode="month">月報</button>
@@ -221,8 +225,12 @@
 
 <script src="dashboard_data.js"></script>
 <script>
-const DATA = (window.DASHBOARD_DATA && window.DASHBOARD_DATA.weeks) || [];
-const REAL_MONTHS = (window.DASHBOARD_DATA && window.DASHBOARD_DATA.months) || null;
+const DATA_TW = (window.DASHBOARD_DATA && window.DASHBOARD_DATA.weeks) || [];
+const REAL_MONTHS_TW = (window.DASHBOARD_DATA && window.DASHBOARD_DATA.months) || null;
+const DATA_OVERSEAS = (window.DASHBOARD_DATA && window.DASHBOARD_DATA.overseas_weeks) || [];
+const REAL_MONTHS_OVERSEAS = (window.DASHBOARD_DATA && window.DASHBOARD_DATA.overseas_months) || null;
+let DATA = DATA_TW; // 目前市場的週資料來源（會依台灣/海外切換）
+let REAL_MONTHS = REAL_MONTHS_TW;
 const fmt = (n, digits=0) => {
   if (n === null || n === undefined || isNaN(n)) return '—';
   return Number(n).toLocaleString('zh-TW', {maximumFractionDigits: digits, minimumFractionDigits: digits});
@@ -371,7 +379,6 @@ function aggregatePeriod(slice, periodStart, periodEnd){
   return { week_start: periodStart, week_end: periodEnd, ga4, meta, google_ads, line_ads, combined };
 }
 
-let MONTHLY_DATA = null;
 function buildMonthlyData(){
   const groups = {};
   const order = [];
@@ -389,6 +396,7 @@ function buildMonthlyData(){
 
 let CURRENT_DATA = DATA;
 let CURRENT_GRANULARITY = 'week';
+let CURRENT_MARKET = 'tw';
 
 // ---------- date range selectors（週報/月報共用同一套填充邏輯）----------
 const startWeekSelect = document.getElementById('startWeekSelect');
@@ -569,8 +577,15 @@ function renderFunnelBar(startIdx, endIdx){
   const realTxnCountSum = sumBy(slice, w=>w.ga4?.成交訂單數);
 
   const pct = (n) => pageViewSum ? n/pageViewSum*100 : null;
-  // 漏斗本身只放「確定會逐層收窄」的 5 個階段（都是同一套 GA4 事件，理論上一定越後面人越少）
-  const stages = [
+  // 漏斗本身只放「確定會逐層收窄」的階段（都是同一套 GA4 事件，理論上一定越後面人越少）
+  // 海外(MY/SG)沒有追蹤 view_item，商品瀏覽率永遠是0%沒有意義，跳過這一階段
+  const isOverseasFunnel = CURRENT_MARKET === 'overseas';
+  const stages = isOverseasFunnel ? [
+    { label:'流量', sub:'工作階段數', pct:100 },
+    { label:'加車率', sub:'（加入購物車 ÷ 工作階段數）', pct:pct(addToCartSum) },
+    { label:'結帳進入率', sub:'（開始結帳 ÷ 工作階段數）', pct:pct(beginCheckoutSum) },
+    { label:'購買率（GA）', sub:'（發生交易 ÷ 工作階段數）', pct:pct(purchaseSum) },
+  ] : [
     { label:'頁面瀏覽', sub:'page_view', pct:100 },
     { label:'商品瀏覽率', sub:'（商品瀏覽 ÷ page_view）', pct:pct(viewItemSum) },
     { label:'加車率', sub:'（加入購物車 ÷ page_view）', pct:pct(addToCartSum) },
@@ -680,8 +695,10 @@ function renderComparison(idxA, idxB){
   ].join(''), startLabel, endLabel);
 
   // GA4 購物漏斗轉換率%（開會主要看這塊，放前面）
+  // 海外(MY/SG)沒有追蹤 view_item，「有瀏覽產品的工作階段%」永遠是0%，沒有意義所以不顯示
+  const isOverseas = CURRENT_MARKET === 'overseas';
   html += block('GA4 購物漏斗轉換率 %', [
-    metricRow('有瀏覽產品的工作階段%', a.ga4, b.ga4, '有瀏覽產品的工作階段%', false, aIsLater),
+    isOverseas ? '' : metricRow('有瀏覽產品的工作階段%', a.ga4, b.ga4, '有瀏覽產品的工作階段%', false, aIsLater),
     metricRow('有放進購物車的工作階段%', a.ga4, b.ga4, '有放進購物車的工作階段%', false, aIsLater),
     metricRow('有結帳的工作階段%', a.ga4, b.ga4, '有結帳的工作階段%', false, aIsLater),
     metricRow('發生交易的工作階段%(GA)', a.ga4, b.ga4, '發生交易的工作階段%(GA)', false, aIsLater),
@@ -690,10 +707,11 @@ function renderComparison(idxA, idxB){
   ].join(''), startLabel, endLabel);
 
   // GA4 事件人次（原始數字，參考用）
+  // 海外的 page_view 跟工作階段數是同一個數字（沒有分開追蹤），view_item 完全沒有資料，都不顯示避免誤會
   html += block('GA4 事件人次', [
     metricRow('工作階段數', a.ga4, b.ga4, '工作階段數', false, aIsLater),
-    metricRow('page_view', a.ga4, b.ga4, 'page_view', false, aIsLater),
-    metricRow('view_item', a.ga4, b.ga4, 'view_item', false, aIsLater),
+    isOverseas ? '' : metricRow('page_view', a.ga4, b.ga4, 'page_view', false, aIsLater),
+    isOverseas ? '' : metricRow('view_item', a.ga4, b.ga4, 'view_item', false, aIsLater),
     metricRow('add_to_cart', a.ga4, b.ga4, 'add_to_cart', false, aIsLater),
     metricRow('begin_checkout', a.ga4, b.ga4, 'begin_checkout', false, aIsLater),
     metricRow('purchase', a.ga4, b.ga4, 'purchase', false, aIsLater),
@@ -743,28 +761,54 @@ function renderAll(startIdx, endIdx){
   // 兩週比較表改由 compareWeekA / compareWeekB 各自的選單獨立驅動，見 onCompareChange()
 }
 
-// ---------- 週報 / 月報 切換 ----------
+// ---------- 台灣 / 海外 切換 + 週報 / 月報 切換（共用同一套邏輯）----------
+let MONTHLY_DATA_CACHE = { tw: null, overseas: null };
+
+function applyDataMode(){
+  DATA = CURRENT_MARKET === 'overseas' ? DATA_OVERSEAS : DATA_TW;
+  REAL_MONTHS = CURRENT_MARKET === 'overseas' ? REAL_MONTHS_OVERSEAS : REAL_MONTHS_TW;
+
+  if (CURRENT_GRANULARITY === 'month'){
+    if (!MONTHLY_DATA_CACHE[CURRENT_MARKET]) MONTHLY_DATA_CACHE[CURRENT_MARKET] = REAL_MONTHS || buildMonthlyData();
+    CURRENT_DATA = MONTHLY_DATA_CACHE[CURRENT_MARKET];
+    document.getElementById('compareTitle').textContent = '兩月比較明細';
+    document.getElementById('compareLabelA').textContent = '月次 A';
+    document.getElementById('compareLabelB').textContent = '月次 B';
+  } else {
+    CURRENT_DATA = DATA;
+    document.getElementById('compareTitle').textContent = '兩週比較明細';
+    document.getElementById('compareLabelA').textContent = '週次 A';
+    document.getElementById('compareLabelB').textContent = '週次 B';
+  }
+
+  if (CURRENT_DATA.length === 0){
+    document.getElementById('kpiGrid').innerHTML = `<div style="color:var(--text-dim); padding:20px;">這個市場目前還沒有資料。</div>`;
+    document.getElementById('funnelWrap').innerHTML = '';
+    document.getElementById('tables').innerHTML = '';
+    return;
+  }
+  populateAllSelects();
+  renderAll(parseInt(startWeekSelect.value), parseInt(endWeekSelect.value));
+  renderComparison(parseInt(compareWeekA.value), parseInt(compareWeekB.value));
+}
+
+document.querySelectorAll('#marketToggle .toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const market = btn.dataset.market;
+    if (market === CURRENT_MARKET) return;
+    CURRENT_MARKET = market;
+    document.querySelectorAll('#marketToggle .toggle-btn').forEach(b => b.classList.toggle('active', b===btn));
+    applyDataMode();
+  });
+});
+
 document.querySelectorAll('#granularityToggle .toggle-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const mode = btn.dataset.mode;
     if (mode === CURRENT_GRANULARITY) return;
     CURRENT_GRANULARITY = mode;
     document.querySelectorAll('#granularityToggle .toggle-btn').forEach(b => b.classList.toggle('active', b===btn));
-    if (mode === 'month'){
-      if (!MONTHLY_DATA) MONTHLY_DATA = REAL_MONTHS || buildMonthlyData();
-      CURRENT_DATA = MONTHLY_DATA;
-      document.getElementById('compareTitle').textContent = '兩月比較明細';
-      document.getElementById('compareLabelA').textContent = '月次 A';
-      document.getElementById('compareLabelB').textContent = '月次 B';
-    } else {
-      CURRENT_DATA = DATA;
-      document.getElementById('compareTitle').textContent = '兩週比較明細';
-      document.getElementById('compareLabelA').textContent = '週次 A';
-      document.getElementById('compareLabelB').textContent = '週次 B';
-    }
-    populateAllSelects();
-    renderAll(parseInt(startWeekSelect.value), parseInt(endWeekSelect.value));
-    renderComparison(parseInt(compareWeekA.value), parseInt(compareWeekB.value));
+    applyDataMode();
   });
 });
 
