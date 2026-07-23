@@ -207,7 +207,7 @@
 
 <div class="foot-note">
   資料來源：GA4 / Meta Ads / Google Ads / LINE Ads，由 run_weekly_pull.py 產生。
-  綠色代表朝好的方向變化，紅色代表朝壞的方向變化（成本類指標下降為好，花費/轉換/ROAS 類指標上升為好）。
+  綠色代表數字下降，紅色代表數字上升（不分指標種類，一律照數字本身漲跌判斷顏色）。
 </div>
 
 <script src="dashboard_data.js"></script>
@@ -223,7 +223,7 @@ const fmtMoney2 = (n) => n===null||n===undefined ? '—' : 'NT$'+fmt(n,2);
 const fmtPct = (n) => n===null||n===undefined ? '—' : fmt(n,2)+'%';
 
 // 指標方向：true = 數值上升是好事，false = 數值下降是好事
-const LOWER_IS_BETTER = ['成本','CPA','CPC','CPM'];
+const LOWER_IS_BETTER = ['成本','CPA','CPC','CPM','花費'];
 function isLowerBetter(name){ return LOWER_IS_BETTER.some(k => name.includes(k)); }
 // 名稱中帶「%」的指標本身就是百分比（例如轉換率、CTR），區間變化改用「直接相減」的百分點差，
 // 而不是「相對成長率」，避免看起來很怪（例如 60.53% 漲到 63.82%，相對成長率會顯示 +5.4%，
@@ -236,22 +236,28 @@ function pctChange(curr, prev){
 }
 
 // curr = 較晚/第二欄的值，prev = 較早/第一欄的值（跟原本語意一致）
+// 簡化規則：不再依欄位種類判斷「漲是好是壞」，一律照數字方向決定顏色 —— 漲=紅、跌=綠、持平=灰
 function deltaBadge(curr, prev, metricName){
-  const lowerBetter = isLowerBetter(metricName);
   if (isPercentMetric(metricName)){
     if (curr===null||curr===undefined||prev===null||prev===undefined) return `<span class="chg delta-flat">—</span>`;
-    const diff = prev - curr; // 週次A（第一欄）剪掉週次B（第二欄）
+    const diff = curr - prev; // 直接看數字本身漲跌（週次B 減 週次A）
     const flat = Math.abs(diff) < 0.05;
-    const improved = lowerBetter ? diff > 0 : diff < 0; // diff>0 代表 B 比 A 低
-    const cls = flat ? 'delta-flat' : (improved ? 'delta-good' : 'delta-bad');
+    const cls = flat ? 'delta-flat' : (diff > 0 ? 'delta-bad' : 'delta-good'); // 漲=紅, 跌=綠
     const sign = diff > 0 ? '+' : '';
-    return `<span class="chg ${cls}">${sign}${fmt(diff,2)}pt</span>`;
+    return `<span class="chg ${cls}">${sign}${fmt(diff,1)}pt</span>`;
+  }
+  // 其中一邊剛好是 0（例如活動當時還沒開始投放），沒辦法算「相對成長率」，
+  // 但仍然是真實發生的變化，不該顯示空白的「—」，改標示「新增／歸零」
+  if (prev === 0 && curr !== null && curr !== undefined && curr > 0){
+    return `<span class="chg delta-bad">新增</span>`; // 從0開始出現數字＝上升＝紅
+  }
+  if (curr === 0 && prev !== null && prev !== undefined && prev > 0){
+    return `<span class="chg delta-good">歸零</span>`; // 歸零＝下降＝綠
   }
   const chg = pctChange(curr, prev);
   if (chg === null) return `<span class="chg delta-flat">—</span>`;
-  const improved = lowerBetter ? chg < 0 : chg > 0;
   const flat = Math.abs(chg) < 0.5;
-  const cls = flat ? 'delta-flat' : (improved ? 'delta-good' : 'delta-bad');
+  const cls = flat ? 'delta-flat' : (chg > 0 ? 'delta-bad' : 'delta-good'); // 漲=紅, 跌=綠
   const sign = chg > 0 ? '+' : '';
   return `<span class="chg ${cls}">${sign}${fmt(chg,1)}%</span>`;
 }
@@ -458,11 +464,14 @@ function renderKPIs(startIdx, endIdx){
   const pCpaAgg = (pOrdersSum) ? pSpendSum/pOrdersSum : null;
   const ga4CpcAgg = weightedAvg(slice, w=>w.combined?.GA4整體CPC, w=>w.combined?.總花費);
   const pGa4CpcAgg = weightedAvg(prevSlice, w=>w.combined?.GA4整體CPC, w=>w.combined?.總花費);
+  const aovAgg = ordersSum ? revenueSum/ordersSum : null;
+  const pAovAgg = pOrdersSum ? pRevenueSum/pOrdersSum : null;
 
   const cards = [
     { label:'總花費（區間加總）', val: fmtMoney(spendSum), curr:spendSum, prev:pSpendSum, name:'總花費', series: slice.map(w=>w.combined?.總花費||0), color:'#E8A33D' },
     { label:'總 ROAS（區間）', val: fmt(roasAgg,2), curr:roasAgg, prev:pRoasAgg, name:'ROAS', series: slice.map(w=>w.combined?.總ROAS||0), color:'#4ADE80' },
     { label:'官網成交營業額（區間加總）', val: fmtMoney(revenueSum), curr:revenueSum, prev:pRevenueSum, name:'成交營業額', series: slice.map(w=>w.ga4?.成交營業額||0), color:'#4F9DE8' },
+    { label:'成交訂單客單（區間）', val: fmtMoney(aovAgg), curr:aovAgg, prev:pAovAgg, name:'成交訂單客單', series: slice.map(w=>w.ga4?.成交訂單客單||0), color:'#C99BE8' },
     { label:'整體 CPA（區間）', val: fmtMoney(cpaAgg), curr:cpaAgg, prev:pCpaAgg, name:'整體CPA', series: slice.map(w=>w.combined?.整體CPA||0), color:'#F87171' },
     { label:'GA4整體CPC（區間）', val: fmtMoney2(ga4CpcAgg), curr:ga4CpcAgg, prev:pGa4CpcAgg, name:'GA4整體CPC', series: slice.map(w=>w.combined?.GA4整體CPC||0), color:'#3ED6C5' },
   ];
@@ -631,20 +640,22 @@ function metricRow(label, aObj, bObj, key, isMoney, aIsLater){
   </div>`;
 }
 
-function block(title, cards, startLabel, endLabel){
+function block(title, cards, startLabel, endLabel, gridClass){
   return `<div class="block">
     <div class="block-title">${title}</div>
     <div class="block-sub">${startLabel} → ${endLabel}</div>
-    <div class="stat-grid">${cards}</div>
+    <div class="stat-grid ${gridClass||''}">${cards}</div>
   </div>`;
 }
+
 
 function renderComparison(idxA, idxB){
   const a = CURRENT_DATA[idxA], b = CURRENT_DATA[idxB]; // a=週次A（第一欄），b=週次B（第二欄），不自動排序，照使用者選的順序顯示
   const aIsLater = a.week_start > b.week_start; // 用實際日期判斷誰比較晚，區間變化才會算對方向
   const startLabel = CURRENT_GRANULARITY==='month' ? a.week_start.slice(0,7) : (a.week_start.slice(5)+'~'+a.week_end.slice(5));
   const endLabel = CURRENT_GRANULARITY==='month' ? b.week_start.slice(0,7) : (b.week_start.slice(5)+'~'+b.week_end.slice(5));
-  document.getElementById('compareLabel').textContent = (a !== b) ? `週次A ${a.week_start}~${a.week_end}　vs　週次B ${b.week_start}~${b.week_end}` : `${a.week_start}~${a.week_end}`;
+  const unitLabel = CURRENT_GRANULARITY==='month' ? '月次' : '週次';
+  document.getElementById('compareLabel').textContent = (a !== b) ? `${unitLabel}A ${a.week_start}~${a.week_end}　vs　${unitLabel}B ${b.week_start}~${b.week_end}` : `${a.week_start}~${a.week_end}`;
 
   let html = '';
 
@@ -659,20 +670,24 @@ function renderComparison(idxA, idxB){
     metricRow('總ROAS', a.combined, b.combined, '總ROAS', false, aIsLater),
   ].join(''), startLabel, endLabel);
 
-  // GA4 漏斗
-  html += block('GA4 事件漏斗 / 購物漏斗%', [
-    metricRow('工作階段數', a.ga4, b.ga4, '工作階段數', false, aIsLater),
-    metricRow('page_view', a.ga4, b.ga4, 'page_view', false, aIsLater),
-    metricRow('view_item', a.ga4, b.ga4, 'view_item', false, aIsLater),
-    metricRow('add_to_cart', a.ga4, b.ga4, 'add_to_cart', false, aIsLater),
-    metricRow('begin_checkout', a.ga4, b.ga4, 'begin_checkout', false, aIsLater),
-    metricRow('purchase', a.ga4, b.ga4, 'purchase', false, aIsLater),
+  // GA4 購物漏斗轉換率%（開會主要看這塊，放前面）
+  html += block('GA4 購物漏斗轉換率 %', [
     metricRow('有瀏覽產品的工作階段%', a.ga4, b.ga4, '有瀏覽產品的工作階段%', false, aIsLater),
     metricRow('有放進購物車的工作階段%', a.ga4, b.ga4, '有放進購物車的工作階段%', false, aIsLater),
     metricRow('有結帳的工作階段%', a.ga4, b.ga4, '有結帳的工作階段%', false, aIsLater),
     metricRow('發生交易的工作階段%(GA)', a.ga4, b.ga4, '發生交易的工作階段%(GA)', false, aIsLater),
     metricRow('真實交易工作階段%', a.ga4, b.ga4, '真實交易工作階段%', false, aIsLater),
     metricRow('購物車交易人次', a.ga4, b.ga4, '購物車交易人次', false, aIsLater),
+  ].join(''), startLabel, endLabel);
+
+  // GA4 事件人次（原始數字，參考用）
+  html += block('GA4 事件人次', [
+    metricRow('工作階段數', a.ga4, b.ga4, '工作階段數', false, aIsLater),
+    metricRow('page_view', a.ga4, b.ga4, 'page_view', false, aIsLater),
+    metricRow('view_item', a.ga4, b.ga4, 'view_item', false, aIsLater),
+    metricRow('add_to_cart', a.ga4, b.ga4, 'add_to_cart', false, aIsLater),
+    metricRow('begin_checkout', a.ga4, b.ga4, 'begin_checkout', false, aIsLater),
+    metricRow('purchase', a.ga4, b.ga4, 'purchase', false, aIsLater),
   ].join(''), startLabel, endLabel);
 
   // Meta 各區塊
