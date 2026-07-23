@@ -59,6 +59,10 @@
     background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
     padding:18px 20px;
   }
+  .kpi-card.highlight{
+    border:2px solid var(--amber);
+    box-shadow:0 0 0 3px rgba(232,163,61,0.15), 0 4px 16px rgba(232,163,61,0.12);
+  }
   .kpi-label{color:var(--text-dim); font-size:12px; margin-bottom:10px;}
   .kpi-value{font-family:'JetBrains Mono',monospace; font-size:clamp(17px, 2.2vw, 26px); font-weight:700; letter-spacing:-0.01em; word-break:break-word;}
   .kpi-delta{display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600; margin-top:8px; padding:2px 8px; border-radius:20px;}
@@ -90,6 +94,10 @@
     background:var(--panel-2); border:1px solid var(--border); border-radius:8px;
     padding:12px 14px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px;
   }
+  .stat-card.highlight{
+    border:2px solid var(--amber);
+    box-shadow:0 0 0 3px rgba(232,163,61,0.15), 0 4px 16px rgba(232,163,61,0.12);
+  }
   .sc-label{color:var(--text-dim); font-size:11.5px; font-weight:500;}
   .sc-values{font-family:'JetBrains Mono',monospace; font-size:clamp(11px, 1.6vw, 15px); font-weight:700; display:flex; align-items:center; gap:4px 6px; flex-wrap:wrap; justify-content:center; word-break:break-word;}
   .sc-arrow{color:var(--text-faint); font-weight:400; font-size:12px;}
@@ -108,7 +116,8 @@
 
   .funnel-crosscheck{
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
-    margin-top:2px; padding:16px 20px; background:var(--panel-2); border:1px dashed var(--border-strong,#3A4256);
+    margin-top:2px; padding:16px 20px; background:var(--panel-2);
+    border:2px solid var(--amber); box-shadow:0 0 0 3px rgba(232,163,61,0.15), 0 4px 16px rgba(232,163,61,0.12);
     border-radius:var(--radius); text-align:center;
   }
   .fc-label{font-weight:600; font-size:13px;}
@@ -468,16 +477,16 @@ function renderKPIs(startIdx, endIdx){
   const pAovAgg = pOrdersSum ? pRevenueSum/pOrdersSum : null;
 
   const cards = [
-    { label:'總花費（區間加總）', val: fmtMoney(spendSum), curr:spendSum, prev:pSpendSum, name:'總花費', series: slice.map(w=>w.combined?.總花費||0), color:'#E8A33D' },
-    { label:'總 ROAS（區間）', val: fmt(roasAgg,2), curr:roasAgg, prev:pRoasAgg, name:'ROAS', series: slice.map(w=>w.combined?.總ROAS||0), color:'#4ADE80' },
-    { label:'官網成交營業額（區間加總）', val: fmtMoney(revenueSum), curr:revenueSum, prev:pRevenueSum, name:'成交營業額', series: slice.map(w=>w.ga4?.成交營業額||0), color:'#4F9DE8' },
+    { label:'總花費（區間加總）', val: fmtMoney(spendSum), curr:spendSum, prev:pSpendSum, name:'總花費', series: slice.map(w=>w.combined?.總花費||0), color:'#E8A33D', highlight:true },
+    { label:'官網成交營業額（區間加總）', val: fmtMoney(revenueSum), curr:revenueSum, prev:pRevenueSum, name:'成交營業額', series: slice.map(w=>w.ga4?.成交營業額||0), color:'#4F9DE8', highlight:true },
+    { label:'總 ROAS（區間）', val: fmt(roasAgg,2), curr:roasAgg, prev:pRoasAgg, name:'ROAS', series: slice.map(w=>w.combined?.總ROAS||0), color:'#4ADE80', highlight:true },
     { label:'成交訂單客單（區間）', val: fmtMoney(aovAgg), curr:aovAgg, prev:pAovAgg, name:'成交訂單客單', series: slice.map(w=>w.ga4?.成交訂單客單||0), color:'#C99BE8' },
     { label:'整體 CPA（區間）', val: fmtMoney(cpaAgg), curr:cpaAgg, prev:pCpaAgg, name:'整體CPA', series: slice.map(w=>w.combined?.整體CPA||0), color:'#F87171' },
     { label:'GA4整體CPC（區間）', val: fmtMoney2(ga4CpcAgg), curr:ga4CpcAgg, prev:pGa4CpcAgg, name:'GA4整體CPC', series: slice.map(w=>w.combined?.GA4整體CPC||0), color:'#3ED6C5' },
   ];
   cards.forEach((c,i) => {
     const div = document.createElement('div');
-    div.className = 'kpi-card';
+    div.className = 'kpi-card' + (c.highlight ? ' highlight' : '');
     div.innerHTML = `
       <div class="kpi-label">${c.label}</div>
       <div class="kpi-value">${c.val}</div>
@@ -617,7 +626,7 @@ function trendOptions(unit, singleAxis){
 }
 
 // ---------- comparison cards ----------
-function metricRow(label, aObj, bObj, key, isMoney, aIsLater){
+function metricRow(label, aObj, bObj, key, isMoney, aIsLater, highlight){
   const aVal = aObj ? aObj[key] : null;
   const bVal = bObj ? bObj[key] : null;
   const isCpc = key.includes('CPC'); // CPC 類欄位固定顯示到小數點第二位
@@ -633,7 +642,7 @@ function metricRow(label, aObj, bObj, key, isMoney, aIsLater){
   // 不管使用者把哪一週選在週次A或週次B、哪一欄顯示在左邊或右邊
   const chgCurr = aIsLater ? aVal : bVal;
   const chgPrev = aIsLater ? bVal : aVal;
-  return `<div class="stat-card">
+  return `<div class="stat-card${highlight?' highlight':''}">
     <div class="sc-label">${label}</div>
     <div class="sc-values"><span>${fmtVal(aVal)}</span><span class="sc-arrow">→</span><span>${fmtVal(bVal)}</span></div>
     <div class="sc-chg">${deltaBadge(chgCurr, chgPrev, label)}</div>
@@ -661,13 +670,13 @@ function renderComparison(idxA, idxB){
 
   // 官網營業指標 + 總廣告成效
   html += block('官網營業指標 / 總廣告成效', [
-    metricRow('成交營業額', a.ga4, b.ga4, '成交營業額', true, aIsLater),
+    metricRow('成交營業額', a.ga4, b.ga4, '成交營業額', true, aIsLater, true),
     metricRow('成交訂單數', a.ga4, b.ga4, '成交訂單數', false, aIsLater),
     metricRow('成交訂單客單', a.ga4, b.ga4, '成交訂單客單', true, aIsLater),
     metricRow('整體CPA', a.combined, b.combined, '整體CPA', true, aIsLater),
-    metricRow('總花費', a.combined, b.combined, '總花費', true, aIsLater),
+    metricRow('總花費', a.combined, b.combined, '總花費', true, aIsLater, true),
     metricRow('GA4整體CPC', a.combined, b.combined, 'GA4整體CPC', true, aIsLater),
-    metricRow('總ROAS', a.combined, b.combined, '總ROAS', false, aIsLater),
+    metricRow('總ROAS', a.combined, b.combined, '總ROAS', false, aIsLater, true),
   ].join(''), startLabel, endLabel);
 
   // GA4 購物漏斗轉換率%（開會主要看這塊，放前面）
@@ -676,7 +685,7 @@ function renderComparison(idxA, idxB){
     metricRow('有放進購物車的工作階段%', a.ga4, b.ga4, '有放進購物車的工作階段%', false, aIsLater),
     metricRow('有結帳的工作階段%', a.ga4, b.ga4, '有結帳的工作階段%', false, aIsLater),
     metricRow('發生交易的工作階段%(GA)', a.ga4, b.ga4, '發生交易的工作階段%(GA)', false, aIsLater),
-    metricRow('真實交易工作階段%', a.ga4, b.ga4, '真實交易工作階段%', false, aIsLater),
+    metricRow('真實交易工作階段%', a.ga4, b.ga4, '真實交易工作階段%', false, aIsLater, true),
     metricRow('購物車交易人次', a.ga4, b.ga4, '購物車交易人次', false, aIsLater),
   ].join(''), startLabel, endLabel);
 
@@ -697,7 +706,8 @@ function renderComparison(idxA, idxB){
     if (!segA) return;
     const rows = Object.keys(segA).map(k => {
       const isMoney = ['花費','購物車成本','轉換成本','轉換值','客單價','CPM'].includes(k);
-      return metricRow(k, segA, segB, k, isMoney, aIsLater);
+      const hl = ['花費','ROAS'].includes(k) || (seg==='知名度_門市' && k==='CPM');
+      return metricRow(k, segA, segB, k, isMoney, aIsLater, hl);
     }).join('');
     html += block(`FB 廣告數據 — ${seg.replace('_',' / ')}`, rows, startLabel, endLabel);
   });
@@ -706,7 +716,8 @@ function renderComparison(idxA, idxB){
   if (a.google_ads){
     const rows = Object.keys(a.google_ads).map(k => {
       const isMoney = ['花費','購物車成本','轉換成本','轉換值','客單價'].includes(k);
-      return metricRow(k, a.google_ads, b.google_ads, k, isMoney, aIsLater);
+      const hl = ['花費','ROAS'].includes(k);
+      return metricRow(k, a.google_ads, b.google_ads, k, isMoney, aIsLater, hl);
     }).join('');
     html += block('Google 廣告數據', rows, startLabel, endLabel);
   }
@@ -715,7 +726,8 @@ function renderComparison(idxA, idxB){
   if (a.line_ads){
     const rows = Object.keys(a.line_ads).map(k => {
       const isMoney = ['總花費','CPF花費','CPF成本','轉換花費','轉換成本','轉換值','客單價'].includes(k);
-      return metricRow(k, a.line_ads, b.line_ads, k, isMoney, aIsLater);
+      const hl = ['總花費','ROAS','CPF成本','轉換花費'].includes(k);
+      return metricRow(k, a.line_ads, b.line_ads, k, isMoney, aIsLater, hl);
     }).join('');
     html += block('LINE 廣告數據', rows, startLabel, endLabel);
   }
