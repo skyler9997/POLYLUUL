@@ -228,7 +228,7 @@ function isLowerBetter(name){ return LOWER_IS_BETTER.some(k => name.includes(k))
 // 名稱中帶「%」的指標本身就是百分比（例如轉換率、CTR），區間變化改用「直接相減」的百分點差，
 // 而不是「相對成長率」，避免看起來很怪（例如 60.53% 漲到 63.82%，相對成長率會顯示 +5.4%，
 // 但實際上只是漲了 3.29 個百分點）
-function isPercentMetric(name){ return name.includes('%'); }
+function isPercentMetric(name){ return name.includes('%') || name.includes('CTR'); }
 
 function pctChange(curr, prev){
   if (curr===null||curr===undefined||prev===null||prev===undefined||prev===0) return null;
@@ -608,15 +608,26 @@ function trendOptions(unit, singleAxis){
 }
 
 // ---------- comparison cards ----------
-function metricRow(label, currObj, prevObj, key, isMoney){
-  const c = currObj ? currObj[key] : null;
-  const p = prevObj ? prevObj[key] : null;
+function metricRow(label, aObj, bObj, key, isMoney, aIsLater){
+  const aVal = aObj ? aObj[key] : null;
+  const bVal = bObj ? bObj[key] : null;
   const isCpc = key.includes('CPC'); // CPC 類欄位固定顯示到小數點第二位
-  const fmtVal = (v) => isCpc ? fmtMoney2(v) : (isMoney ? fmtMoney(v) : (typeof v === 'number' ? fmt(v, Number.isInteger(v)?0:2) : (v ?? '—')));
+  const isPct = isPercentMetric(key); // 本身就是百分比的欄位，數值要帶 % 符號
+  const fmtVal = (v) => {
+    if (v===null||v===undefined) return '—';
+    if (isCpc) return fmtMoney2(v);
+    if (isMoney) return fmtMoney(v);
+    if (isPct) return fmt(v,2)+'%';
+    return typeof v === 'number' ? fmt(v, Number.isInteger(v)?0:2) : (v ?? '—');
+  };
+  // 區間變化一律照「實際時間先後」計算（較晚的週次 vs 較早的週次），
+  // 不管使用者把哪一週選在週次A或週次B、哪一欄顯示在左邊或右邊
+  const chgCurr = aIsLater ? aVal : bVal;
+  const chgPrev = aIsLater ? bVal : aVal;
   return `<div class="stat-card">
     <div class="sc-label">${label}</div>
-    <div class="sc-values"><span>${fmtVal(p)}</span><span class="sc-arrow">→</span><span>${fmtVal(c)}</span></div>
-    <div class="sc-chg">${deltaBadge(c,p,label)}</div>
+    <div class="sc-values"><span>${fmtVal(aVal)}</span><span class="sc-arrow">→</span><span>${fmtVal(bVal)}</span></div>
+    <div class="sc-chg">${deltaBadge(chgCurr, chgPrev, label)}</div>
   </div>`;
 }
 
@@ -630,7 +641,7 @@ function block(title, cards, startLabel, endLabel){
 
 function renderComparison(idxA, idxB){
   const a = CURRENT_DATA[idxA], b = CURRENT_DATA[idxB]; // a=週次A（第一欄），b=週次B（第二欄），不自動排序，照使用者選的順序顯示
-  const curr = b, prev = a; // metricRow / deltaBadge 沿用 curr=第二欄, prev=第一欄 的語意
+  const aIsLater = a.week_start > b.week_start; // 用實際日期判斷誰比較晚，區間變化才會算對方向
   const startLabel = CURRENT_GRANULARITY==='month' ? a.week_start.slice(0,7) : (a.week_start.slice(5)+'~'+a.week_end.slice(5));
   const endLabel = CURRENT_GRANULARITY==='month' ? b.week_start.slice(0,7) : (b.week_start.slice(5)+'~'+b.week_end.slice(5));
   document.getElementById('compareLabel').textContent = (a !== b) ? `週次A ${a.week_start}~${a.week_end}　vs　週次B ${b.week_start}~${b.week_end}` : `${a.week_start}~${a.week_end}`;
@@ -639,57 +650,57 @@ function renderComparison(idxA, idxB){
 
   // 官網營業指標 + 總廣告成效
   html += block('官網營業指標 / 總廣告成效', [
-    metricRow('成交營業額', curr.ga4, prev?.ga4, '成交營業額', true),
-    metricRow('成交訂單數', curr.ga4, prev?.ga4, '成交訂單數'),
-    metricRow('成交訂單客單', curr.ga4, prev?.ga4, '成交訂單客單', true),
-    metricRow('整體CPA', curr.combined, prev?.combined, '整體CPA', true),
-    metricRow('總花費', curr.combined, prev?.combined, '總花費', true),
-    metricRow('GA4整體CPC', curr.combined, prev?.combined, 'GA4整體CPC', true),
-    metricRow('總ROAS', curr.combined, prev?.combined, '總ROAS'),
+    metricRow('成交營業額', a.ga4, b.ga4, '成交營業額', true, aIsLater),
+    metricRow('成交訂單數', a.ga4, b.ga4, '成交訂單數', false, aIsLater),
+    metricRow('成交訂單客單', a.ga4, b.ga4, '成交訂單客單', true, aIsLater),
+    metricRow('整體CPA', a.combined, b.combined, '整體CPA', true, aIsLater),
+    metricRow('總花費', a.combined, b.combined, '總花費', true, aIsLater),
+    metricRow('GA4整體CPC', a.combined, b.combined, 'GA4整體CPC', true, aIsLater),
+    metricRow('總ROAS', a.combined, b.combined, '總ROAS', false, aIsLater),
   ].join(''), startLabel, endLabel);
 
   // GA4 漏斗
   html += block('GA4 事件漏斗 / 購物漏斗%', [
-    metricRow('工作階段數', curr.ga4, prev?.ga4, '工作階段數'),
-    metricRow('page_view', curr.ga4, prev?.ga4, 'page_view'),
-    metricRow('view_item', curr.ga4, prev?.ga4, 'view_item'),
-    metricRow('add_to_cart', curr.ga4, prev?.ga4, 'add_to_cart'),
-    metricRow('begin_checkout', curr.ga4, prev?.ga4, 'begin_checkout'),
-    metricRow('purchase', curr.ga4, prev?.ga4, 'purchase'),
-    metricRow('有瀏覽產品的工作階段%', curr.ga4, prev?.ga4, '有瀏覽產品的工作階段%'),
-    metricRow('有放進購物車的工作階段%', curr.ga4, prev?.ga4, '有放進購物車的工作階段%'),
-    metricRow('有結帳的工作階段%', curr.ga4, prev?.ga4, '有結帳的工作階段%'),
-    metricRow('發生交易的工作階段%(GA)', curr.ga4, prev?.ga4, '發生交易的工作階段%(GA)'),
-    metricRow('真實交易工作階段%', curr.ga4, prev?.ga4, '真實交易工作階段%'),
-    metricRow('購物車交易人次', curr.ga4, prev?.ga4, '購物車交易人次'),
+    metricRow('工作階段數', a.ga4, b.ga4, '工作階段數', false, aIsLater),
+    metricRow('page_view', a.ga4, b.ga4, 'page_view', false, aIsLater),
+    metricRow('view_item', a.ga4, b.ga4, 'view_item', false, aIsLater),
+    metricRow('add_to_cart', a.ga4, b.ga4, 'add_to_cart', false, aIsLater),
+    metricRow('begin_checkout', a.ga4, b.ga4, 'begin_checkout', false, aIsLater),
+    metricRow('purchase', a.ga4, b.ga4, 'purchase', false, aIsLater),
+    metricRow('有瀏覽產品的工作階段%', a.ga4, b.ga4, '有瀏覽產品的工作階段%', false, aIsLater),
+    metricRow('有放進購物車的工作階段%', a.ga4, b.ga4, '有放進購物車的工作階段%', false, aIsLater),
+    metricRow('有結帳的工作階段%', a.ga4, b.ga4, '有結帳的工作階段%', false, aIsLater),
+    metricRow('發生交易的工作階段%(GA)', a.ga4, b.ga4, '發生交易的工作階段%(GA)', false, aIsLater),
+    metricRow('真實交易工作階段%', a.ga4, b.ga4, '真實交易工作階段%', false, aIsLater),
+    metricRow('購物車交易人次', a.ga4, b.ga4, '購物車交易人次', false, aIsLater),
   ].join(''), startLabel, endLabel);
 
   // Meta 各區塊
   const metaSegments = ['整體','新客','知名度_門市','再行銷','海外_港澳'];
   metaSegments.forEach(seg => {
-    const c = curr.meta?.[seg], p = prev?.meta?.[seg];
-    if (!c) return;
-    const rows = Object.keys(c).map(k => {
+    const segA = a.meta?.[seg], segB = b.meta?.[seg];
+    if (!segA) return;
+    const rows = Object.keys(segA).map(k => {
       const isMoney = ['花費','購物車成本','轉換成本','轉換值','客單價','CPM'].includes(k);
-      return metricRow(k, c, p, k, isMoney);
+      return metricRow(k, segA, segB, k, isMoney, aIsLater);
     }).join('');
     html += block(`FB 廣告數據 — ${seg.replace('_',' / ')}`, rows, startLabel, endLabel);
   });
 
   // Google Ads
-  if (curr.google_ads){
-    const rows = Object.keys(curr.google_ads).map(k => {
+  if (a.google_ads){
+    const rows = Object.keys(a.google_ads).map(k => {
       const isMoney = ['花費','購物車成本','轉換成本','轉換值','客單價'].includes(k);
-      return metricRow(k, curr.google_ads, prev?.google_ads, k, isMoney);
+      return metricRow(k, a.google_ads, b.google_ads, k, isMoney, aIsLater);
     }).join('');
     html += block('Google 廣告數據', rows, startLabel, endLabel);
   }
 
   // LINE Ads
-  if (curr.line_ads){
-    const rows = Object.keys(curr.line_ads).map(k => {
+  if (a.line_ads){
+    const rows = Object.keys(a.line_ads).map(k => {
       const isMoney = ['總花費','CPF花費','CPF成本','轉換花費','轉換成本','轉換值','客單價'].includes(k);
-      return metricRow(k, curr.line_ads, prev?.line_ads, k, isMoney);
+      return metricRow(k, a.line_ads, b.line_ads, k, isMoney, aIsLater);
     }).join('');
     html += block('LINE 廣告數據', rows, startLabel, endLabel);
   }
