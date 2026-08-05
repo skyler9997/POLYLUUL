@@ -223,7 +223,7 @@
   綠色代表數字下降，紅色代表數字上升（不分指標種類，一律照數字本身漲跌判斷顏色）。
 </div>
 
-<script src="dashboard_data.js"></script>
+<script>document.write('<script src="dashboard_data.js?t=' + Date.now() + '"><\/script>');</script>
 <script>
 const DATA_TW = (window.DASHBOARD_DATA && window.DASHBOARD_DATA.weeks) || [];
 const REAL_MONTHS_TW = (window.DASHBOARD_DATA && window.DASHBOARD_DATA.months) || null;
