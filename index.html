@@ -266,7 +266,7 @@ function deltaBadge(curr, prev, metricName){
   if (isPercentMetric(metricName)){
     if (curr===null||curr===undefined||prev===null||prev===undefined) return `<span class="chg delta-flat">—</span>`;
     const diff = curr - prev; // 直接看數字本身漲跌（週次B 減 週次A）
-    const flat = Math.abs(diff) < 0.05;
+    const flat = Math.abs(diff) < 1;
     const cls = flat ? 'delta-flat' : (diff > 0 ? 'delta-bad' : 'delta-good'); // 漲=紅, 跌=綠
     const sign = diff > 0 ? '+' : '';
     return `<span class="chg ${cls}">${sign}${fmt(diff,1)}pt</span>`;
@@ -281,7 +281,7 @@ function deltaBadge(curr, prev, metricName){
   }
   const chg = pctChange(curr, prev);
   if (chg === null) return `<span class="chg delta-flat">—</span>`;
-  const flat = Math.abs(chg) < 0.5;
+  const flat = Math.abs(chg) < 15;
   const cls = flat ? 'delta-flat' : (chg > 0 ? 'delta-bad' : 'delta-good'); // 漲=紅, 跌=綠
   const sign = chg > 0 ? '+' : '';
   return `<span class="chg ${cls}">${sign}${fmt(chg,1)}%</span>`;
