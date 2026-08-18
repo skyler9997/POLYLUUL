@@ -92,7 +92,7 @@
   .stat-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:10px; padding-bottom:12px;}
   .stat-card{
     background:var(--panel-2); border:1px solid var(--border); border-radius:8px;
-    padding:14px 14px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px;
+    padding:16px 14px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:10px;
   }
   .stat-card.highlight{
     border:2px solid var(--amber);
@@ -147,7 +147,7 @@
     .section-head{flex-direction:column; align-items:flex-start;}
     .section-head .controls{margin-left:0 !important;}
     .stat-grid{grid-template-columns:repeat(2, 1fr); gap:8px;}
-    .stat-card{padding:10px;}
+    .stat-card{padding:12px 10px; gap:9px;}
     .sc-label{font-size:10.5px;}
     .sc-values{font-size:13px;}
     .chg{font-size:10.5px; padding:2px 6px;}
@@ -223,7 +223,7 @@
       <select id="compareWeekB"></select>
     </div>
   </div>
-  <div class="hint-note">↑ 箭頭與區間變化，皆為「週次 對比 比較週次」的方向（週次 比 比較週次 高＝紅、低＝綠），與時間先後無關，請以卡片上方標示的實際日期為準</div>
+  <div class="hint-note" id="hintNote">↑ 箭頭與區間變化，皆為「週次 對比 比較週次」的方向（週次 比 比較週次 高＝紅、低＝綠），與時間先後無關，請以卡片上方標示的實際日期為準</div>
   <div id="tables"></div>
 </div>
 
@@ -679,10 +679,9 @@ function metricRow(label, aObj, bObj, key, isMoney, aIsLater, highlight){
   const chgPrev = bVal;
   let triangleHtml = '';
   if (typeof chgCurr === 'number' && typeof chgPrev === 'number'){
-    const flat = isChangeFlat_(chgCurr, chgPrev, label);
-    if (flat) triangleHtml = '<span class="sc-triangle sc-triangle-flat">●</span>';
-    else if (chgCurr > chgPrev) triangleHtml = '<span class="sc-triangle sc-triangle-up">▲</span>';
+    if (chgCurr > chgPrev) triangleHtml = '<span class="sc-triangle sc-triangle-up">▲</span>';
     else if (chgCurr < chgPrev) triangleHtml = '<span class="sc-triangle sc-triangle-down">▼</span>';
+    else triangleHtml = '<span class="sc-triangle sc-triangle-flat">●</span>';
   }
   return `<div class="stat-card${highlight?' highlight':''}">
     <div class="sc-label">${label}</div>
@@ -803,11 +802,13 @@ function applyDataMode(){
     document.getElementById('compareTitle').textContent = '兩月比較明細';
     document.getElementById('compareLabelA').textContent = '月次';
     document.getElementById('compareLabelB').textContent = '比較月次';
+    document.getElementById('hintNote').textContent = '↑ 箭頭與區間變化，皆為「月次 對比 比較月次」的方向（月次 比 比較月次 高＝紅、低＝綠），與時間先後無關，請以卡片上方標示的實際日期為準';
   } else {
     CURRENT_DATA = DATA;
     document.getElementById('compareTitle').textContent = '兩週比較明細';
     document.getElementById('compareLabelA').textContent = '週次';
     document.getElementById('compareLabelB').textContent = '比較週次';
+    document.getElementById('hintNote').textContent = '↑ 箭頭與區間變化，皆為「週次 對比 比較週次」的方向（週次 比 比較週次 高＝紅、低＝綠），與時間先後無關，請以卡片上方標示的實際日期為準';
   }
 
   if (CURRENT_DATA.length === 0){
