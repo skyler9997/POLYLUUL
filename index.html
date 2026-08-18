@@ -101,12 +101,13 @@
   .sc-label{color:var(--text-dim); font-size:11.5px; font-weight:500;}
   .sc-values{font-family:'JetBrains Mono',monospace; font-size:clamp(11px, 1.6vw, 15px); font-weight:700; display:flex; align-items:center; gap:4px 6px; flex-wrap:wrap; justify-content:center; word-break:break-word; font-variant-numeric:slashed-zero;}
   .sc-main{font-family:'JetBrains Mono',monospace; font-size:clamp(15px, 2vw, 19px); font-weight:700; font-variant-numeric:slashed-zero; word-break:break-word;}
-  .sc-vs{font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-faint); margin-top:2px; font-variant-numeric:slashed-zero; word-break:break-word;}
+  .sc-vs{font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600; color:var(--text-dim); margin-top:2px; font-variant-numeric:slashed-zero; word-break:break-word;}
   .sc-arrow{color:var(--text-faint); font-weight:400; font-size:12px;}
   .sc-triangle-row{width:100%; display:flex; justify-content:flex-end; height:0; margin-top:-4px;}
   .sc-triangle{font-size:16px; position:relative; top:-2px;}
   .sc-triangle-up{color:var(--bad);}
   .sc-triangle-down{color:var(--good);}
+  .sc-triangle-flat{color:var(--text-faint); font-size:11px;}
   .sc-chg{margin-top:2px;}
 
   .foot-note{color:var(--text-faint); font-size:12px; margin-top:30px; border-top:1px solid var(--border); padding-top:16px;}
@@ -216,13 +217,13 @@
     <h2 id="compareTitle">兩週比較明細</h2>
     <span class="n" id="compareLabel"></span>
     <div class="controls" style="margin-left:auto; align-self:center;">
-      <label id="compareLabelA" style="color:var(--text-dim); font-size:12px;">週次 A</label>
+      <label id="compareLabelA" style="color:var(--text-dim); font-size:12px;">週次</label>
       <select id="compareWeekA"></select>
-      <label id="compareLabelB" style="color:var(--text-dim); font-size:12px;">週次 B</label>
+      <label id="compareLabelB" style="color:var(--text-dim); font-size:12px;">比較週次</label>
       <select id="compareWeekB"></select>
     </div>
   </div>
-  <div class="hint-note">↑ 箭頭與區間變化，皆為「週次A 對比 週次B」的方向（A 比 B 高＝紅、A 比 B 低＝綠），與時間先後無關，請以卡片上方標示的實際日期為準</div>
+  <div class="hint-note">↑ 箭頭與區間變化，皆為「週次 對比 比較週次」的方向（週次 比 比較週次 高＝紅、低＝綠），與時間先後無關，請以卡片上方標示的實際日期為準</div>
   <div id="tables"></div>
 </div>
 
@@ -260,13 +261,24 @@ function pctChange(curr, prev){
   return (curr-prev)/Math.abs(prev)*100;
 }
 
+// 判斷這個變化算不算「幅度不大、可以用中性灰色」——三角形跟下面色塊共用同一套規則
+function isChangeFlat_(curr, prev, metricName){
+  if (curr===null||curr===undefined||prev===null||prev===undefined) return true;
+  if (isPercentMetric(metricName)){
+    return Math.abs(curr - prev) < 1; // 百分比欄位：±1pt 以內算不顯著
+  }
+  if (prev === 0) return curr === 0; // 從0開始出現視為顯著變化，不算flat
+  const chg = pctChange(curr, prev);
+  return chg === null ? true : Math.abs(chg) < 15; // 一般欄位：±15% 以內算不顯著
+}
+
 // curr = 較晚/第二欄的值，prev = 較早/第一欄的值（跟原本語意一致）
 // 簡化規則：不再依欄位種類判斷「漲是好是壞」，一律照數字方向決定顏色 —— 漲=紅、跌=綠、持平=灰
 function deltaBadge(curr, prev, metricName){
   if (isPercentMetric(metricName)){
     if (curr===null||curr===undefined||prev===null||prev===undefined) return `<span class="chg delta-flat">—</span>`;
     const diff = curr - prev; // 直接看數字本身漲跌（週次B 減 週次A）
-    const flat = Math.abs(diff) < 1;
+    const flat = isChangeFlat_(curr, prev, metricName);
     const cls = flat ? 'delta-flat' : (diff > 0 ? 'delta-bad' : 'delta-good'); // 漲=紅, 跌=綠
     const sign = diff > 0 ? '+' : '';
     return `<span class="chg ${cls}">${sign}${fmt(diff,1)}pt</span>`;
@@ -281,7 +293,7 @@ function deltaBadge(curr, prev, metricName){
   }
   const chg = pctChange(curr, prev);
   if (chg === null) return `<span class="chg delta-flat">—</span>`;
-  const flat = Math.abs(chg) < 15;
+  const flat = isChangeFlat_(curr, prev, metricName);
   const cls = flat ? 'delta-flat' : (chg > 0 ? 'delta-bad' : 'delta-good'); // 漲=紅, 跌=綠
   const sign = chg > 0 ? '+' : '';
   return `<span class="chg ${cls}">${sign}${fmt(chg,1)}%</span>`;
@@ -667,7 +679,9 @@ function metricRow(label, aObj, bObj, key, isMoney, aIsLater, highlight){
   const chgPrev = bVal;
   let triangleHtml = '';
   if (typeof chgCurr === 'number' && typeof chgPrev === 'number'){
-    if (chgCurr > chgPrev) triangleHtml = '<span class="sc-triangle sc-triangle-up">▲</span>';
+    const flat = isChangeFlat_(chgCurr, chgPrev, label);
+    if (flat) triangleHtml = '<span class="sc-triangle sc-triangle-flat">●</span>';
+    else if (chgCurr > chgPrev) triangleHtml = '<span class="sc-triangle sc-triangle-up">▲</span>';
     else if (chgCurr < chgPrev) triangleHtml = '<span class="sc-triangle sc-triangle-down">▼</span>';
   }
   return `<div class="stat-card${highlight?' highlight':''}">
@@ -694,7 +708,7 @@ function renderComparison(idxA, idxB){
   const startLabel = CURRENT_GRANULARITY==='month' ? a.week_start.slice(0,7) : (a.week_start.slice(5)+'~'+a.week_end.slice(5));
   const endLabel = CURRENT_GRANULARITY==='month' ? b.week_start.slice(0,7) : (b.week_start.slice(5)+'~'+b.week_end.slice(5));
   const unitLabel = CURRENT_GRANULARITY==='month' ? '月次' : '週次';
-  document.getElementById('compareLabel').textContent = (a !== b) ? `${unitLabel}A ${a.week_start}~${a.week_end}　vs　${unitLabel}B ${b.week_start}~${b.week_end}` : `${a.week_start}~${a.week_end}`;
+  document.getElementById('compareLabel').textContent = (a !== b) ? `${unitLabel} ${a.week_start}~${a.week_end}　vs　比較${unitLabel} ${b.week_start}~${b.week_end}` : `${a.week_start}~${a.week_end}`;
 
   let html = '';
 
@@ -787,13 +801,13 @@ function applyDataMode(){
     if (!MONTHLY_DATA_CACHE[CURRENT_MARKET]) MONTHLY_DATA_CACHE[CURRENT_MARKET] = REAL_MONTHS || buildMonthlyData();
     CURRENT_DATA = MONTHLY_DATA_CACHE[CURRENT_MARKET];
     document.getElementById('compareTitle').textContent = '兩月比較明細';
-    document.getElementById('compareLabelA').textContent = '月次 A';
-    document.getElementById('compareLabelB').textContent = '月次 B';
+    document.getElementById('compareLabelA').textContent = '月次';
+    document.getElementById('compareLabelB').textContent = '比較月次';
   } else {
     CURRENT_DATA = DATA;
     document.getElementById('compareTitle').textContent = '兩週比較明細';
-    document.getElementById('compareLabelA').textContent = '週次 A';
-    document.getElementById('compareLabelB').textContent = '週次 B';
+    document.getElementById('compareLabelA').textContent = '週次';
+    document.getElementById('compareLabelB').textContent = '比較週次';
   }
 
   if (CURRENT_DATA.length === 0){
