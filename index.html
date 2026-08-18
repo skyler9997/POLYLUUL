@@ -100,10 +100,17 @@
   }
   .sc-label{color:var(--text-dim); font-size:11.5px; font-weight:500;}
   .sc-values{font-family:'JetBrains Mono',monospace; font-size:clamp(11px, 1.6vw, 15px); font-weight:700; display:flex; align-items:center; gap:4px 6px; flex-wrap:wrap; justify-content:center; word-break:break-word; font-variant-numeric:slashed-zero;}
+  .sc-main{font-family:'JetBrains Mono',monospace; font-size:clamp(15px, 2vw, 19px); font-weight:700; font-variant-numeric:slashed-zero; word-break:break-word;}
+  .sc-vs{font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-faint); margin-top:2px; font-variant-numeric:slashed-zero; word-break:break-word;}
   .sc-arrow{color:var(--text-faint); font-weight:400; font-size:12px;}
+  .sc-triangle-row{width:100%; display:flex; justify-content:flex-end; height:0; margin-top:-4px;}
+  .sc-triangle{font-size:16px; position:relative; top:-2px;}
+  .sc-triangle-up{color:var(--bad);}
+  .sc-triangle-down{color:var(--good);}
   .sc-chg{margin-top:2px;}
 
   .foot-note{color:var(--text-faint); font-size:12px; margin-top:30px; border-top:1px solid var(--border); padding-top:16px;}
+  .hint-note{color:var(--text-faint); font-size:11.5px; margin-bottom:12px; padding:8px 12px; background:var(--panel-2); border-radius:6px; border-left:2px solid var(--amber);}
 
   .funnel{display:flex; flex-direction:column; gap:2px; padding:8px 0;}
   .funnel-seg{
@@ -215,6 +222,7 @@
       <select id="compareWeekB"></select>
     </div>
   </div>
+  <div class="hint-note">↑ 箭頭與區間變化，皆為「週次A 對比 週次B」的方向（A 比 B 高＝紅、A 比 B 低＝綠），與時間先後無關，請以卡片上方標示的實際日期為準</div>
   <div id="tables"></div>
 </div>
 
@@ -653,13 +661,20 @@ function metricRow(label, aObj, bObj, key, isMoney, aIsLater, highlight){
     if (isPct) return fmt(v,2)+'%';
     return typeof v === 'number' ? fmt(v, Number.isInteger(v)?0:2) : (v ?? '—');
   };
-  // 區間變化一律照「實際時間先後」計算（較晚的週次 vs 較早的週次），
-  // 不管使用者把哪一週選在週次A或週次B、哪一欄顯示在左邊或右邊
-  const chgCurr = aIsLater ? aVal : bVal;
-  const chgPrev = aIsLater ? bVal : aVal;
+  // 區間變化永遠是「週次A 相對於 週次B」（A=你要報告的週次，B=拿來對比的基準），
+  // 不管兩週實際時間先後，都是看 A 比 B 漲了還是跌了
+  const chgCurr = aVal;
+  const chgPrev = bVal;
+  let triangleHtml = '';
+  if (typeof chgCurr === 'number' && typeof chgPrev === 'number'){
+    if (chgCurr > chgPrev) triangleHtml = '<span class="sc-triangle sc-triangle-up">▲</span>';
+    else if (chgCurr < chgPrev) triangleHtml = '<span class="sc-triangle sc-triangle-down">▼</span>';
+  }
   return `<div class="stat-card${highlight?' highlight':''}">
     <div class="sc-label">${label}</div>
-    <div class="sc-values"><span>${fmtVal(aVal)}</span><span class="sc-arrow">→</span><span>${fmtVal(bVal)}</span></div>
+    <div class="sc-main">${fmtVal(aVal)}</div>
+    <div class="sc-triangle-row">${triangleHtml}</div>
+    <div class="sc-vs">vs ${fmtVal(bVal)}</div>
     <div class="sc-chg">${deltaBadge(chgCurr, chgPrev, label)}</div>
   </div>`;
 }
