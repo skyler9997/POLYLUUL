@@ -4368,6 +4368,118 @@ window.DASHBOARD_DATA = {
         "成交訂單客單": 1943,
         "GA4整體CPC": 3.69
       }
+    },
+    {
+      "week_start": "2026-09-21",
+      "week_end": "2026-09-27",
+      "ga4": {
+        "成交營業額": null,
+        "成交訂單數": null,
+        "成交訂單客單": null,
+        "整體CPA": null,
+        "工作階段數": null,
+        "page_view": null,
+        "view_item": null,
+        "add_to_cart": null,
+        "begin_checkout": null,
+        "purchase": null,
+        "有瀏覽產品的工作階段%": null,
+        "有放進購物車的工作階段%": null,
+        "有結帳的工作階段%": null,
+        "發生交易的工作階段%(GA)": null,
+        "真實交易工作階段%": null,
+        "購物車交易人次": null
+      },
+      "meta": {
+        "整體": {
+          "花費": 0,
+          "點擊數": 0,
+          "CTR(連外)": null,
+          "CPC": null,
+          "購物車次數": 0,
+          "購物車成本": null,
+          "轉換次數": 0,
+          "轉換成本": null,
+          "轉換值": 0,
+          "CPM": null,
+          "ROAS": null
+        },
+        "新客": {
+          "花費": null,
+          "點擊數": null,
+          "CTR(連外)": null,
+          "CPC": null,
+          "購物車次數": null,
+          "購物車成本": null,
+          "轉換次數": null,
+          "轉換成本": null,
+          "轉換值": null,
+          "客單價": null,
+          "ROAS": null
+        },
+        "知名度_門市": {
+          "花費": null,
+          "觸及數": null,
+          "CPM": null
+        },
+        "再行銷": {
+          "花費": null,
+          "點擊數": null,
+          "CTR(連外)": null,
+          "CPC": null,
+          "購物車次數": null,
+          "購物車成本": null,
+          "轉換次數": null,
+          "轉換成本": null,
+          "轉換值": null,
+          "客單價": null,
+          "ROAS": null
+        },
+        "海外_港澳": {
+          "花費": null,
+          "點擊數": null,
+          "CTR(連外)": null,
+          "CPC": null,
+          "購物車次數": null,
+          "購物車成本": null,
+          "轉換次數": null,
+          "轉換成本": null,
+          "轉換值": null,
+          "客單價": null,
+          "ROAS": null
+        }
+      },
+      "google_ads": {
+        "花費": null,
+        "點擊數": null,
+        "CPC": null,
+        "購物車次數": null,
+        "購物車成本": null,
+        "轉換次數": null,
+        "轉換成本": null,
+        "轉換值": null,
+        "客單價": null,
+        "ROAS": null
+      },
+      "line_ads": {
+        "總花費": 0,
+        "CPF花費": null,
+        "CPF點擊數": 0,
+        "CPF成本": null,
+        "轉換花費": null,
+        "轉換次數": null,
+        "轉換成本": null,
+        "轉換值": null,
+        "客單價": null,
+        "ROAS": null
+      },
+      "combined": {
+        "總花費": 0,
+        "總ROAS": null,
+        "整體CPA": null,
+        "成交訂單客單": null,
+        "GA4整體CPC": null
+      }
     }
   ],
   "months": [
